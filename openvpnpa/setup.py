@@ -32,41 +32,41 @@ def collect(ask, secret):
                     return value
             except ValueError:
                 pass
-            print('پورت باید عددی بین ۱ و ۶۵۵۳۵ باشد.')
+            print('Port bayad adadi beyn 1 ta 65535 bashad.')
     while True:
-        host = ask('IP عمومی IPv4 یا دامنه همین سرور')
+        host = ask('IP omumi IPv4 ya domain hamin server')
         try:
             hostname(host)
             break
         except (ValueError,TypeError):
-            print('آدرس معتبر وارد کنید؛ بدون https و بدون پورت.')
-    panel_url = ask('آدرس HTTPS پنل پاسارگارد، بدون /api انتهایی')
-    admin_user = ask('نام مدیر پنل OpenVPN','admin')
+            print('Adres motabar vared konid; bedoon https va bedoon port.')
+    panel_url = ask('Adres HTTPS panel PasarGuard, bedoon /api dar entehaye adres')
+    admin_user = ask('Username admin panel OpenVPN','admin')
     while True:
-        password = secret('رمز پنل OpenVPN، حداقل ۱۶ کاراکتر: ')
-        if len(password)>=16 and password==secret('تکرار رمز پنل OpenVPN: '):
+        password = secret('Password panel OpenVPN, hadeaghal 16 karakter: ')
+        if len(password)>=16 and password==secret('Tekrar password panel OpenVPN: '):
             break
-        print('رمز باید حداقل ۱۶ کاراکتر باشد و تکرار آن مطابقت داشته باشد.')
-    public_ui = str(ask('پنل OpenVPN از بیرون سرور قابل دسترسی باشد؟ y/n','y')).lower() in ('y','yes','بله')
-    tag = ask('تگ اختصاصی این نود','openvpnpa_'+node_key.replace('-','')[:8])
-    groups = ask('شناسه گروه اختصاصی در پاسارگارد، اگر دارید؛ وگرنه Enter','')
+        print('Password bayad hadeaghal 16 karakter bashad va tekrar an yeksan bashad.')
+    public_ui = str(ask('Panel OpenVPN az biron server ghabel dastresi bashad? y/n','y')).lower() in ('y','yes','bale')
+    tag = ask('Tag ekhtesasi in node','openvpnpa_'+node_key.replace('-','')[:8])
+    groups = ask('ID group ekhtesasi dar PasarGuard; agar nadarid Enter bezanid','')
     data = validate(dict(public_host=host,panel_url=panel_url,admin_user=admin_user,
         admin_password=password,public_ui=public_ui,inbound_tag=tag,
         group_ids=[int(value.strip()) for value in groups.split(',') if value.strip()],
-        node_api_key=node_key,vpn_port=port('پورت UDP اتصال OpenVPN',1194),
-        node_port=port('پورت TCP ارتباط نود با پاسارگارد',62050),
-        ui_port=port('پورت HTTPS پنل OpenVPN',8443)))
+        node_api_key=node_key,vpn_port=port('Port UDP etesal OpenVPN',1194),
+        node_port=port('Port TCP etesal node be PasarGuard',62050),
+        ui_port=port('Port HTTPS panel OpenVPN',8443)))
     while True:
-        method = str(ask('ورود به پاسارگارد: 1 نام کاربری/رمز، 2 توکن API','1'))
+        method = str(ask('Vorood be PasarGuard: 1 username/password, 2 API token','1'))
         if method in ('1','2'):
             break
-        print('عدد ۱ یا ۲ را وارد کنید.')
+        print('Adad 1 ya 2 ra vared konid.')
     panel = Panel(data)
     if method=='1':
-        username = ask('نام کاربری مدیر پاسارگارد')
-        data['panel_token'] = panel.login(username,secret('رمز مدیر پاسارگارد (ذخیره نمی‌شود): '))
+        username = ask('Username admin PasarGuard')
+        data['panel_token'] = panel.login(username,secret('Password admin PasarGuard (zakhire nemishavad): '))
     else:
-        data['panel_token'] = secret('توکن API پاسارگارد: ')
+        data['panel_token'] = secret('API token PasarGuard: ')
         panel.request('GET','/api/users?limit=1')
     return data
 
@@ -82,12 +82,12 @@ def summary(config_path, state_path):
         rows = dict(line.split('=',1) for line in env.read_text().splitlines() if '=' in line and not line.startswith('#'))
         public = rows.get('UI_BIND','127.0.0.1')!='127.0.0.1'
     print('\n'+'='*64)
-    print('نصب پنل و نود OpenVPN انجام شد')
-    print('آدرس پنل: https://'+(data['public_host'] if public else 'localhost')+':'+str(data['ui_port']))
-    print('نام مدیر پنل: '+data['admin_user'])
+    print('Nasb panel va node OpenVPN anjam shod')
+    print('Adres panel: https://'+(data['public_host'] if public else 'localhost')+':'+str(data['ui_port']))
+    print('Username admin panel: '+data['admin_user'])
     if not public:
-        print('پنل فقط روی loopback است؛ برای دسترسی از SSH forwarding استفاده کنید.')
-    print('\nمشخصات برای افزودن نود جدید در پاسارگارد:')
+        print('Panel faghat rooye loopback ast; az SSH forwarding estefade konid.')
+    print('\nMoshakhasat baraye ezafe kardan node jadid dar PasarGuard:')
     print('Connection type: REST')
     print('Address: '+data['public_host'])
     print('Port: '+str(data['node_port']))
@@ -98,8 +98,8 @@ def summary(config_path, state_path):
     print('\nAPI Key:\n'+data['node_api_key'])
     print('\nCertificate (server_ca):\n'+certificate)
     print('='*64)
-    print('این Certificate عمومی است؛ کلید خصوصی CA هرگز نمایش داده نمی‌شود.')
-    print('پس از ثبت نود و گروه اختصاصی، شناسه گروه را در صفحه /setup پنل OpenVPN ذخیره کنید.')
+    print('In Certificate omumi ast; private key CA namayesh dade nemishavad.')
+    print('Bad az sabt node va group ekhtesasi, ID group ra dar safhe /setup panel OpenVPN zakhire konid.')
 
 
 def write_config(target, data):
@@ -161,4 +161,4 @@ if __name__=='__main__':
     try:
         main()
     except (ValueError,PanelError) as error:
-        raise SystemExit('تنظیمات کامل نشد: '+str(error)) from None
+        raise SystemExit('Tanzimat kamel nashod: '+str(error)) from None
