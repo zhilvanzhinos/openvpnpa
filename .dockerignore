@@ -1,0 +1,7 @@
+.git
+.venv
+.state
+reports
+__pycache__
+**/__pycache__
+*.sqlite*

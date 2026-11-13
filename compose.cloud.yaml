@@ -1,0 +1,8 @@
+# Optional build-time trust for a managed HTTPS proxy. Never copied into layers.
+services:
+  compatibility:
+    build:
+      secrets: [proxy_ca]
+secrets:
+  proxy_ca:
+    file: ${OPENVPNPA_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}
