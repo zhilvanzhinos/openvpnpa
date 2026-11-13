@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+export PATH="${PATH:-/usr/bin:/bin}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
-OPENVPNPA_RELEASE=v0.2.0-beta.6
+OPENVPNPA_RELEASE=v0.2.0-beta.7
 INSTALL_ROOT=/opt/openvpnpa
 INPUT_CONFIG=
 CHECK_ONLY=0
 PUBLIC_UI=0
 SHOW_CONNECTION=0
+PREPARE_ONLY=0
 usage() {
   cat <<'EOF'
 OpenVPNPA isolated node + management UI installer (Ubuntu 24.04)
@@ -15,6 +17,7 @@ OpenVPNPA isolated node + management UI installer (Ubuntu 24.04)
   --check  Read-only preflight; install nothing and contact no panel.
   --public-ui  Expose the authenticated HTTPS management UI on all IPv4 addresses.
   --show-connection  Show the installed node API Key and complete public Certificate.
+  --prepare-only  Install/check prerequisites without changing application data or services.
 The installer does not register a node or modify the active PasarGuard panel.
 Existing Docker services, containers, host firewall rules and user files are preserved.
 EOF
@@ -25,6 +28,7 @@ while (($#)); do
     --check) CHECK_ONLY=1; shift ;;
     --public-ui) PUBLIC_UI=1; shift ;;
     --show-connection) SHOW_CONNECTION=1; shift ;;
+    --prepare-only) PREPARE_ONLY=1; shift ;;
     --config) [[ $# -ge 2 ]] || { usage; exit 2; }; INPUT_CONFIG=$2; shift 2 ;;
     *) usage; exit 2 ;;
   esac
@@ -54,16 +58,49 @@ if [[ -n "$INPUT_CONFIG" ]]; then
   [[ $(stat -c '%a' "$INPUT_CONFIG") == 600 ]] || { echo 'Input config must have mode 0600.' >&2; exit 1; }
 fi
 export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=l
 apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl git python3 python3-venv
+apt-get install -y --no-install-recommends ca-certificates curl git python3 python3-venv util-linux procps
 if ! command -v docker >/dev/null; then
+  if pgrep -x dockerd >/dev/null; then
+    echo 'Docker daemon faal ast ama CLI dar PATH nist; baraye hefz service-haye faal daemon jadid nasb nemishavad.' >&2
+    exit 1
+  fi
   apt-get install -y --no-install-recommends docker.io docker-compose-v2
   systemctl enable --now docker
 elif ! docker compose version >/dev/null 2>&1; then
-  echo 'Docker exists but Compose v2 is missing. Install the matching Compose plugin and rerun.' >&2
+  if [[ $(dpkg-query -W -f='${Status}' docker-ce-cli 2>/dev/null || true) == 'install ok installed' ]]; then
+    apt-get install -y --no-install-recommends docker-compose-plugin
+  elif [[ $(dpkg-query -W -f='${Status}' docker.io 2>/dev/null || true) == 'install ok installed' ]]; then
+    apt-get install -y --no-install-recommends docker-compose-v2
+  else
+    echo 'Docker ekhtesasi ast; Compose motabegh ba haman nasb lazem ast. Daemon taghir nakard.' >&2
+    exit 1
+  fi
+fi
+if ! docker info >/dev/null 2>&1; then
+  if pgrep -x dockerd >/dev/null || systemctl is-active --quiet docker; then
+    echo 'Docker daemon faal ast ama CLI be an dastresi nadarad; daemon restart nashod.' >&2
+    exit 1
+  fi
+  DOCKER_ENDPOINT=$(docker context inspect --format '{{.Endpoints.docker.Host}}')
+  if [[ "$DOCKER_ENDPOINT" != unix:///var/run/docker.sock || ( -n "${DOCKER_HOST:-}" && "$DOCKER_HOST" != unix:///var/run/docker.sock ) ]]; then
+    echo 'Docker context ekhtesasi dar dastres nist; daemon mahalli start nashod.' >&2
+    exit 1
+  fi
+  echo 'Docker service ghablan faal nabood; dar hale start...'
+  systemctl start docker
+fi
+docker compose version >/dev/null
+docker info >/dev/null
+if ((PREPARE_ONLY)); then
+  echo 'Pishniazha amade shodand; config, state va container taghir nakardand.'
+  exit 0
+fi
+if [[ -n $(docker ps -aq --filter label=com.docker.compose.project=openvpnpa --filter label=com.docker.compose.service=node) && ( ! -f "$INSTALL_ROOT/config/config.json" || ! -f "$INSTALL_ROOT/config/compose.env" ) ]]; then
+  echo 'Container OpenVPNPA vojood darad ama config standard kamel nist; nasb khodkar baraye hefz an motovaghef shod.' >&2
   exit 1
 fi
-docker info >/dev/null
 # Never restart an existing Docker daemon, enable a VPN, or flush a firewall.
 mkdir -p "$INSTALL_ROOT/releases" "$INSTALL_ROOT/config" "$INSTALL_ROOT/state"
 chmod 700 "$INSTALL_ROOT/config" "$INSTALL_ROOT/state"
@@ -115,7 +152,7 @@ root=pathlib.Path(sys.argv[1])
 version=sys.argv[2]
 text='#!/usr/bin/env bash\nset -euo pipefail\nROOT=/opt/openvpnpa\nexec docker compose --project-name openvpnpa --env-file "$ROOT/config/compose.env" -f "$ROOT/releases/'+version+'/deploy/compose.yaml" "$@"\n'
 target=root/'manage'
-known={text,text.replace(version,'v0.2.0-beta.1'),text.replace(version,'v0.2.0-beta.2'),text.replace(version,'v0.2.0-beta.3'),text.replace(version,'v0.2.0-beta.4'),text.replace(version,'v0.2.0-beta.5')}
+known={text,text.replace(version,'v0.2.0-beta.1'),text.replace(version,'v0.2.0-beta.2'),text.replace(version,'v0.2.0-beta.3'),text.replace(version,'v0.2.0-beta.4'),text.replace(version,'v0.2.0-beta.5'),text.replace(version,'v0.2.0-beta.6')}
 if target.exists() and target.read_text() not in known:
     target=root/('manage-'+version)
     if target.exists() and target.read_text()!=text:
