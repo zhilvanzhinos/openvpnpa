@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-VERSION=v0.2.0-beta.2
+OPENVPNPA_RELEASE=v0.2.0-beta.3
 INSTALL_ROOT=/opt/openvpnpa
 INPUT_CONFIG=
 CHECK_ONLY=0
@@ -31,7 +31,7 @@ while (($#)); do
 done
 if ((SHOW_CONNECTION)); then
   [[ $EUID -eq 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }
-  (cd "$INSTALL_ROOT/releases/$VERSION" && python3 -m openvpnpa.setup --output "$INSTALL_ROOT/config/config.json" --state "$INSTALL_ROOT/state" --summary)
+  (cd "$INSTALL_ROOT/releases/$OPENVPNPA_RELEASE" && python3 -m openvpnpa.setup --output "$INSTALL_ROOT/config/config.json" --state "$INSTALL_ROOT/state" --summary)
   exit 0
 fi
 [[ -r /etc/os-release ]] || { echo 'Cannot identify the OS.' >&2; exit 1; }
@@ -67,18 +67,18 @@ docker info >/dev/null
 # Never restart an existing Docker daemon, enable a VPN, or flush a firewall.
 mkdir -p "$INSTALL_ROOT/releases" "$INSTALL_ROOT/config" "$INSTALL_ROOT/state"
 chmod 700 "$INSTALL_ROOT/config" "$INSTALL_ROOT/state"
-RELEASE_DIR="$INSTALL_ROOT/releases/$VERSION"
+RELEASE_DIR="$INSTALL_ROOT/releases/$OPENVPNPA_RELEASE"
 if [[ ! -e "$RELEASE_DIR" ]]; then
   STAGING=$(mktemp -d "$INSTALL_ROOT/releases/.download-XXXXXX")
   trap '[[ -z "${STAGING:-}" ]] || rm -rf -- "$STAGING"' EXIT
-  git clone --depth 1 --branch "$VERSION" https://github.com/zhilvanzhinos/openvpnpa.git "$STAGING/source"
+  git clone --depth 1 --branch "$OPENVPNPA_RELEASE" https://github.com/zhilvanzhinos/openvpnpa.git "$STAGING/source"
   mv "$STAGING/source" "$RELEASE_DIR"
   rmdir "$STAGING"
   STAGING=
 else
   git -C "$RELEASE_DIR" diff --quiet
   git -C "$RELEASE_DIR" diff --cached --quiet
-  [[ $(git -C "$RELEASE_DIR" describe --tags --exact-match HEAD) == "$VERSION" ]] || { echo 'Existing release does not match the requested tag.' >&2; exit 1; }
+  [[ $(git -C "$RELEASE_DIR" describe --tags --exact-match HEAD) == "$OPENVPNPA_RELEASE" ]] || { echo 'Existing release does not match the requested tag.' >&2; exit 1; }
 fi
 SETUP_ARGS=(--output "$INSTALL_ROOT/config/config.json")
 [[ -z "$INPUT_CONFIG" ]] || SETUP_ARGS+=(--from-file "$INPUT_CONFIG")
@@ -109,14 +109,14 @@ fi
 "${COMPOSE[@]}" run --rm --no-deps node --init
 "${COMPOSE[@]}" up -d --wait --wait-timeout 60
 # Only publish the local helper after successful startup. Use an argv array.
-python3 - "$INSTALL_ROOT" "$VERSION" <<'PY'
+python3 - "$INSTALL_ROOT" "$OPENVPNPA_RELEASE" <<'PY'
 import os,pathlib,sys,tempfile
 root=pathlib.Path(sys.argv[1])
 version=sys.argv[2]
 text='#!/usr/bin/env bash\nset -euo pipefail\nROOT=/opt/openvpnpa\nexec docker compose --project-name openvpnpa --env-file "$ROOT/config/compose.env" -f "$ROOT/releases/'+version+'/deploy/compose.yaml" "$@"\n'
 target=root/'manage'
-old=text.replace(version,'v0.2.0-beta.1')
-if target.exists() and target.read_text() not in (old,text):
+known={text,text.replace(version,'v0.2.0-beta.1'),text.replace(version,'v0.2.0-beta.2')}
+if target.exists() and target.read_text() not in known:
     target=root/('manage-'+version)
     if target.exists() and target.read_text()!=text:
         raise SystemExit('Custom management helper preserved; cannot replace it')

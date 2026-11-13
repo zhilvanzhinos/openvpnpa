@@ -8,6 +8,7 @@ import http.client
 import json
 import io
 import os
+import re
 import shutil
 import ssl
 import subprocess
@@ -346,6 +347,24 @@ class RuntimeTests(unittest.TestCase):
 
 
 class SetupTests(unittest.TestCase):
+    def test_os_release_does_not_change_git_clone_ref(self):
+        script = (Path(__file__).resolve().parents[1]/'install.sh').read_text()
+        expected = re.search(r'^OPENVPNPA_RELEASE=(\S+)$',script,re.MULTILINE).group(1)
+        # Run the actual installer prelude and actual clone command. Only the
+        # OS file and Git executable are substituted; no root or network needed.
+        prelude = script.split('[[ "$ID" == ubuntu',1)[0]
+        prelude = prelude.replace('source /etc/os-release','source "$OPENVPNPA_TEST_OS"')
+        clone = next(line for line in script.splitlines() if line.strip().startswith('git clone '))
+        with tempfile.TemporaryDirectory() as tmp:
+            release = Path(tmp)/'os-release'
+            release.write_text('ID=ubuntu\nVERSION_ID="24.04"\nVERSION="24.04.1 LTS (Noble Numbat)"\n')
+            command = prelude+'\ngit() { printf "%s\\n" "$@"; }\nSTAGING=unused\n'+clone
+            result = subprocess.run(['bash','-c',command],env=dict(os.environ,OPENVPNPA_TEST_OS=str(release)),
+                check=True,capture_output=True,text=True,timeout=5)
+            args = result.stdout.splitlines()
+            self.assertEqual(args[args.index('--branch')+1],expected)
+            self.assertNotIn('Noble Numbat',result.stdout)
+
     def test_summary_refuses_private_key_instead_of_certificate(self):
         data = dict(public_host='vpn.example.com',panel_url='https://panel.example.com',
             admin_user='admin',admin_password='test-long-password-123',node_api_key=str(uuid4()),inbound_tag='openvpnpa')
