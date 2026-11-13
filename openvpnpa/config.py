@@ -20,7 +20,10 @@ def hostname(value):
 
 
 def load(path):
-    data = json.loads(Path(path).read_text())
+    return validate(json.loads(Path(path).read_text()))
+
+
+def validate(data):
     hostname(data["public_host"])
     url = urlsplit(data["panel_url"])
     if url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment:
@@ -41,6 +44,9 @@ def load(path):
     if data["ui_port"] == data["node_port"]:
         raise ValueError("UI and node TCP ports must differ")
     data.setdefault("group_ids", [])
+    data.setdefault("public_ui", False)
+    if type(data['public_ui']) is not bool:
+        raise ValueError('public_ui must be a boolean')
     if not isinstance(data["group_ids"], list) or any(type(i) is not int or i < 1 for i in data["group_ids"]):
         raise ValueError("group_ids must be positive integers")
     data.setdefault("lease_seconds", 120)

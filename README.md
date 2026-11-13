@@ -1,19 +1,22 @@
 # OpenVPNPA: OpenVPN node + independent management UI
 
-**وضعیت: نسخه آزمایشی `v0.2.0-beta.1`؛ پنل مدیریت و adapter نود پیاده‌سازی
+**وضعیت: نسخه آزمایشی `v0.2.0-beta.2`؛ پنل مدیریت و adapter نود پیاده‌سازی
 شده‌اند. تونل واقعی روی این محیط ابری، به علت نبود TUN، تأیید نشده است.**
 
 نصب روی یک Ubuntu 24.04 مستقل با معماری amd64 و TUN فعال:
 
 ```sh
-openvpnpa_installer=$(mktemp)
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.1/install.sh -o "$openvpnpa_installer" && sudo bash "$openvpnpa_installer" --public-ui
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.2/install.sh | sudo bash
 ```
 
-نصب‌کننده آدرس نود، آدرس HTTPS پاسارگارد، توکن API و مشخصات مدیر محلی را
-می‌گیرد. پس از نصب، پنل روی `https://NODE_ADDRESS:8443` است. گواهی CA محلی
+این یک دستور تمام مراحل نصب محلی را اجرا می‌کند و سؤال‌ها را به فارسی
+داخل ترمینال می‌پرسد. ورود به پاسارگارد با نام کاربری/رمز یا توکن API ممکن
+است؛ در حالت اول توکن خودکار دریافت می‌شود و رمز اصلی ذخیره نمی‌شود.
+در پایان، آدرس پنل، پورت‌ها، **API Key** و متن کامل **Certificate** چاپ
+می‌شوند. پس از نصب، پنل روی `https://NODE_ADDRESS:8443` است. گواهی CA محلی
 را از مسیر اعلام‌شده از طریق SSH دریافت و برای همین اتصال اعتماد کنید؛
-کلید خصوصی CA را جابه‌جا نکنید. بدون `--public-ui` رابط فقط روی loopback است.
+کلید خصوصی CA را جابه‌جا نکنید. نصب‌کننده درباره دسترسی بیرونی پنل سؤال
+می‌کند؛ پاسخ n آن را فقط روی loopback نگه می‌دارد.
 
 در صفحه `/setup`، مشخصات **Core، گروه و نود جدید** برای ثبت در پاسارگارد
 نمایش داده می‌شود. شناسه گروه را همان‌جا ذخیره کنید؛ سپس کاربر بسازید یا

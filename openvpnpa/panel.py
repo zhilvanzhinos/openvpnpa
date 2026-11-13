@@ -3,7 +3,7 @@ import json
 import ssl
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 
@@ -22,6 +22,17 @@ class Panel:
         context = ssl.create_default_context(cafile=config.get("panel_ca") or None)
         self.client = build_opener(NoRedirect(), HTTPSHandler(context=context))
 
+    def login(self, username, password):
+        req = Request(self.config['panel_url']+'/api/admin/token',
+            data=urlencode({'username':username,'password':password}).encode(),
+            headers={'Content-Type':'application/x-www-form-urlencoded'},method='POST')
+        data = self.exchange(req)
+        token = data.get('access_token') if isinstance(data,dict) else None
+        if not isinstance(token,str) or not token or '\n' in token or '\r' in token:
+            raise PanelError('PasarGuard did not return a valid access token')
+        self.config['panel_token'] = token
+        return token
+
     def request(self, method, path, body=None):
         token = self.config.get("panel_token", "")
         if not token:
@@ -29,6 +40,9 @@ class Panel:
         req = Request(self.config["panel_url"]+path,
             data=json.dumps(body).encode() if body is not None else None,
             headers={"Authorization": "Bearer "+token, "Content-Type": "application/json"}, method=method)
+        return self.exchange(req)
+
+    def exchange(self, req):
         try:
             with self.client.open(req, timeout=10) as response:
                 payload = response.read(4*1024*1024+1)

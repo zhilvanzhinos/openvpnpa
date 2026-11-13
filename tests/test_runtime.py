@@ -6,6 +6,7 @@ does not claim to create a kernel TUN or run the complete upstream panel.
 import base64
 import http.client
 import json
+import io
 import os
 import shutil
 import ssl
@@ -14,6 +15,8 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import redirect_stdout
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlencode
@@ -25,7 +28,7 @@ from openvpnpa.config import load
 from openvpnpa.panel import Panel, PanelError
 from openvpnpa.pki import PKI
 from openvpnpa.server import Handler, NodeHandler, UIHandler, serve
-from openvpnpa.setup import write_config
+from openvpnpa.setup import write_config, collect, summary
 from openvpnpa.state import State
 from openvpnpa.vpn import VPN
 
@@ -62,8 +65,19 @@ class RuntimeTests(unittest.TestCase):
         class PanelMock(Handler):
             def handle_route(self):
                 test.api_calls.append((self.command,self.path))
+                if self.command=='POST' and self.path=='/api/admin/token':
+                    from urllib.parse import parse_qs
+                    form = parse_qs(self.body().decode())
+                    if form=={'username':['panel-admin'],'password':['main-panel-password']}:
+                        self.reply(200,b'{"access_token":"lab-token","token_type":"bearer"}')
+                    else:
+                        self.reply(401,b'{}')
+                    return
                 if self.headers.get('Authorization')!='Bearer lab-token':
                     self.reply(401,b'{}')
+                    return
+                if self.command=='GET' and self.path=='/api/users?limit=1':
+                    self.reply(200,b'{"users":[],"total":0}')
                     return
                 if self.command=='POST' and self.path=='/api/user':
                     data = json.loads(self.body())
@@ -150,6 +164,40 @@ class RuntimeTests(unittest.TestCase):
         subprocess.run(['openssl','verify','-CAfile',str(self.pki.root/'ca.crt'),
             '-purpose','sslclient',str(self.pki.root/'client-42.crt')],check=True,stdout=subprocess.DEVNULL)
         self.assertNotIn('proxy_settings',self.app.state.users()[0])
+
+    def test_terminal_questionnaire_logs_in_without_storing_panel_password(self):
+        answers = iter(['127.0.0.1',self.app.config['panel_url'],'admin','y','openvpnpa_fresh','7',1194,62050,8443,'1','panel-admin'])
+        passwords = iter(['local-password-123456','local-password-123456','main-panel-password'])
+        with patch('openvpnpa.setup.Panel',return_value=self.app.panel):
+            data = collect(lambda *_:next(answers),lambda _:next(passwords))
+        self.assertEqual(data['panel_token'],'lab-token')
+        self.assertTrue(data['public_ui'])
+        self.assertEqual(data['group_ids'],[7])
+        self.assertNotIn('main-panel-password',json.dumps(data))
+        self.assertEqual(self.api_calls,[('POST','/api/admin/token')])
+
+    def test_terminal_questionnaire_supports_existing_api_token(self):
+        answers = iter(['127.0.0.1',self.app.config['panel_url'],'admin','n','openvpnpa_fresh','',1194,62050,8443,'2'])
+        passwords = iter(['local-password-123456','local-password-123456','lab-token'])
+        with patch('openvpnpa.setup.Panel',return_value=self.app.panel):
+            data = collect(lambda *_:next(answers),lambda _:next(passwords))
+        self.assertEqual(data['panel_token'],'lab-token')
+        self.assertFalse(data['public_ui'])
+        self.assertEqual(self.api_calls,[('GET','/api/users?limit=1')])
+
+    def test_terminal_summary_displays_api_key_and_complete_certificate_only(self):
+        path = self.app.root/'config.json'
+        write_config(path,dict(self.base,public_ui=True))
+        output = io.StringIO()
+        with redirect_stdout(output):
+            summary(path,self.root)
+        text = output.getvalue()
+        self.assertIn(self.base['node_api_key'],text)
+        self.assertIn((self.pki.root/'ca.crt').read_text().strip(),text)
+        self.assertIn('API Port: 62050',text)
+        self.assertNotIn('PRIVATE KEY',text)
+        self.assertNotIn(self.base['admin_password'],text)
+        self.assertNotIn(self.base['panel_token'],text)
 
     def test_profile_and_setup_are_not_public_and_csrf_is_required(self):
         for path in ('/setup','/profiles/42.ovpn'):
@@ -298,6 +346,19 @@ class RuntimeTests(unittest.TestCase):
 
 
 class SetupTests(unittest.TestCase):
+    def test_summary_refuses_private_key_instead_of_certificate(self):
+        data = dict(public_host='vpn.example.com',panel_url='https://panel.example.com',
+            admin_user='admin',admin_password='test-long-password-123',node_api_key=str(uuid4()),inbound_tag='openvpnpa')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_config(root/'config.json',data)
+            (root/'pki').mkdir()
+            (root/'pki/ca.crt').write_text('-----BEGIN PRIVATE KEY-----\nnot-a-certificate\n-----END PRIVATE KEY-----')
+            output = io.StringIO()
+            with redirect_stdout(output),self.assertRaises(ValueError):
+                summary(root/'config.json',root)
+            self.assertEqual(output.getvalue(),'')
+
     def test_installer_preflight_stops_without_tun(self):
         release = Path('/etc/os-release').read_text()
         if 'ID=ubuntu\n' not in release or 'VERSION_ID="24.04"' not in release or Path('/dev/net/tun').exists():

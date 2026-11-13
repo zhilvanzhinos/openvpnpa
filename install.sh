@@ -2,17 +2,19 @@
 set -euo pipefail
 umask 077
 
-VERSION=v0.2.0-beta.1
+VERSION=v0.2.0-beta.2
 INSTALL_ROOT=/opt/openvpnpa
 INPUT_CONFIG=
 CHECK_ONLY=0
 PUBLIC_UI=0
+SHOW_CONNECTION=0
 usage() {
   cat <<'EOF'
 OpenVPNPA isolated node + management UI installer (Ubuntu 24.04)
-  sudo bash install.sh [--config /absolute/private-input.json] [--public-ui] [--check]
+  sudo bash install.sh [--config /absolute/private-input.json] [--public-ui] [--check] [--show-connection]
   --check  Read-only preflight; install nothing and contact no panel.
   --public-ui  Expose the authenticated HTTPS management UI on all IPv4 addresses.
+  --show-connection  Show the installed node API Key and complete public Certificate.
 The installer does not register a node or modify the active PasarGuard panel.
 Existing Docker services, containers, host firewall rules and user files are preserved.
 EOF
@@ -22,10 +24,16 @@ while (($#)); do
     --help|-h) usage; exit 0 ;;
     --check) CHECK_ONLY=1; shift ;;
     --public-ui) PUBLIC_UI=1; shift ;;
+    --show-connection) SHOW_CONNECTION=1; shift ;;
     --config) [[ $# -ge 2 ]] || { usage; exit 2; }; INPUT_CONFIG=$2; shift 2 ;;
     *) usage; exit 2 ;;
   esac
 done
+if ((SHOW_CONNECTION)); then
+  [[ $EUID -eq 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }
+  (cd "$INSTALL_ROOT/releases/$VERSION" && python3 -m openvpnpa.setup --output "$INSTALL_ROOT/config/config.json" --state "$INSTALL_ROOT/state" --summary)
+  exit 0
+fi
 [[ -r /etc/os-release ]] || { echo 'Cannot identify the OS.' >&2; exit 1; }
 # OS-supplied file, never a user config or downloaded shell fragment.
 source /etc/os-release
@@ -85,7 +93,8 @@ text=''.join(f'{key}={int(data.get(field,default))}\n' for key,field,default in
 target=root/'config/compose.env'
 if not target.exists():
     with target.open('x') as stream:
-        stream.write(text+'UI_BIND='+('0.0.0.0' if sys.argv[2]=='1' else '127.0.0.1')+'\n')
+        public=sys.argv[2]=='1' or data.get('public_ui',False)
+        stream.write(text+'UI_BIND='+('0.0.0.0' if public else '127.0.0.1')+'\n')
 elif sys.argv[2]=='1':
     rows=target.read_text().splitlines()
     target.write_text('\n'.join(line for line in rows if not line.startswith('UI_BIND='))+'\nUI_BIND=0.0.0.0\n')
@@ -100,19 +109,22 @@ fi
 "${COMPOSE[@]}" run --rm --no-deps node --init
 "${COMPOSE[@]}" up -d --wait --wait-timeout 60
 # Only publish the local helper after successful startup. Use an argv array.
-HELPER="$INSTALL_ROOT/manage"
-if [[ ! -e "$HELPER" ]]; then
-  cat > "$HELPER" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT=/opt/openvpnpa
-exec docker compose --project-name openvpnpa --env-file "$ROOT/config/compose.env" -f "$ROOT/releases/v0.2.0-beta.1/deploy/compose.yaml" "$@"
-EOF
-  chmod 700 "$HELPER"
-fi
-echo "Installed $VERSION. Public UI was requested: $PUBLIC_UI (otherwise loopback only)."
-echo "Use HTTPS on the configured UI port; use SSH forwarding for a loopback-only UI."
-echo "Public CA certificate: $INSTALL_ROOT/state/pki/ca.crt"
-echo "In the UI open /setup to register a NEW PasarGuard core, group and REST node."
-echo "After setting group_ids in $INSTALL_ROOT/config/config.json: $HELPER restart node"
-echo "Logs: $HELPER logs --tail=100 node"
+python3 - "$INSTALL_ROOT" "$VERSION" <<'PY'
+import os,pathlib,sys,tempfile
+root=pathlib.Path(sys.argv[1])
+version=sys.argv[2]
+text='#!/usr/bin/env bash\nset -euo pipefail\nROOT=/opt/openvpnpa\nexec docker compose --project-name openvpnpa --env-file "$ROOT/config/compose.env" -f "$ROOT/releases/'+version+'/deploy/compose.yaml" "$@"\n'
+target=root/'manage'
+old=text.replace(version,'v0.2.0-beta.1')
+if target.exists() and target.read_text() not in (old,text):
+    target=root/('manage-'+version)
+    if target.exists() and target.read_text()!=text:
+        raise SystemExit('Custom management helper preserved; cannot replace it')
+fd,tmp=tempfile.mkstemp(prefix='.manage-',dir=root)
+with os.fdopen(fd,'w') as stream:
+    os.fchmod(stream.fileno(),0o700)
+    stream.write(text)
+os.replace(tmp,target)
+print('دستور مشاهده لاگ: sudo '+str(target)+' logs --tail=100 node')
+PY
+(cd "$RELEASE_DIR" && python3 -m openvpnpa.setup --output "$INSTALL_ROOT/config/config.json" --state "$INSTALL_ROOT/state" --summary)
