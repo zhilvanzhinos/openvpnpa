@@ -1,12 +1,12 @@
 # OpenVPNPA: OpenVPN node + independent management UI
 
-**وضعیت: نسخه آزمایشی `v0.2.0-beta.5`؛ پنل مدیریت و adapter نود پیاده‌سازی
+**وضعیت: نسخه آزمایشی `v0.2.0-beta.6`؛ پنل مدیریت و adapter نود پیاده‌سازی
 شده‌اند. تونل واقعی روی این محیط ابری، به علت نبود TUN، تأیید نشده است.**
 
 نصب روی یک Ubuntu 24.04 مستقل با معماری amd64 و TUN فعال:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.5/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.6/install.sh | sudo bash
 ```
 
 این یک دستور تمام مراحل نصب محلی را اجرا می‌کند و سؤال‌ها را به فینگلیش
@@ -17,6 +17,16 @@ curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta
 را از مسیر اعلام‌شده از طریق SSH دریافت و برای همین اتصال اعتماد کنید؛
 کلید خصوصی CA را جابه‌جا نکنید. نصب‌کننده درباره دسترسی بیرونی پنل سؤال
 می‌کند؛ پاسخ n آن را فقط روی loopback نگه می‌دارد.
+
+آپدیت نصب موجود به آخرین تغییرات GitHub، بدون ورود دوباره تنظیمات:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/main/update.sh | sudo bash
+```
+
+پس از اولین آپدیت موفق، `sudo /opt/openvpnpa/update` هم همین کار را انجام
+می‌دهد. داده‌ها و گواهی‌ها حفظ می‌شوند؛ جایگزینی سرویس یک قطع کوتاه دارد.
+[جزئیات backup و rollback](docs/update.fa.md).
 
 در صفحه `/setup`، مشخصات **Core، گروه و نود جدید** برای ثبت در پاسارگارد
 نمایش داده می‌شود. شناسه گروه را همان‌جا ذخیره کنید؛ سپس کاربر بسازید یا

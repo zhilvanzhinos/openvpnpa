@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-OPENVPNPA_RELEASE=v0.2.0-beta.5
+OPENVPNPA_RELEASE=v0.2.0-beta.6
 INSTALL_ROOT=/opt/openvpnpa
 INPUT_CONFIG=
 CHECK_ONLY=0
@@ -115,7 +115,7 @@ root=pathlib.Path(sys.argv[1])
 version=sys.argv[2]
 text='#!/usr/bin/env bash\nset -euo pipefail\nROOT=/opt/openvpnpa\nexec docker compose --project-name openvpnpa --env-file "$ROOT/config/compose.env" -f "$ROOT/releases/'+version+'/deploy/compose.yaml" "$@"\n'
 target=root/'manage'
-known={text,text.replace(version,'v0.2.0-beta.1'),text.replace(version,'v0.2.0-beta.2'),text.replace(version,'v0.2.0-beta.3'),text.replace(version,'v0.2.0-beta.4')}
+known={text,text.replace(version,'v0.2.0-beta.1'),text.replace(version,'v0.2.0-beta.2'),text.replace(version,'v0.2.0-beta.3'),text.replace(version,'v0.2.0-beta.4'),text.replace(version,'v0.2.0-beta.5')}
 if target.exists() and target.read_text() not in known:
     target=root/('manage-'+version)
     if target.exists() and target.read_text()!=text:
@@ -127,4 +127,8 @@ with os.fdopen(fd,'w') as stream:
 os.replace(tmp,target)
 print('Dastoor moshahede log: sudo '+str(target)+' logs --tail=100 node')
 PY
+if [[ ! -e "$INSTALL_ROOT/update" && ! -L "$INSTALL_ROOT/update" ]]; then
+  install -m 700 "$RELEASE_DIR/update.sh" "$INSTALL_ROOT/update"
+fi
+echo "Update az GitHub: sudo $INSTALL_ROOT/update"
 (cd "$RELEASE_DIR" && python3 -m openvpnpa.setup --output "$INSTALL_ROOT/config/config.json" --state "$INSTALL_ROOT/state" --summary)

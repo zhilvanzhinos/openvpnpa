@@ -8,7 +8,7 @@
 ## دستور نصب
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.5/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.6/install.sh | sudo bash
 ```
 
 همین یک دستور دانلود، پرسش‌نامه فینگلیش، نصب Docker در صورت نیاز، ساخت تصویر،
@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta
 فرمان پیش‌بررسی فقط‌خواندنی:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.5/install.sh | bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.6/install.sh | bash -s -- --check
 ```
 
 نصب‌کننده سیستم و TUN را ابتدا بررسی می‌کند؛ اگر TUN نباشد بدون تغییر متوقف
@@ -57,7 +57,7 @@ Certificate همان CA عمومی موردنیاز فیلد `server_ca` پاس�
 برای نمایش مجدد مشخصات، بدون نصب دوباره:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.5/install.sh | sudo bash -s -- --show-connection
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.6/install.sh | sudo bash -s -- --show-connection
 ```
 
 افزودن نود جدید در پاسارگارد با این اطلاعات انجام می‌شود؛ نصب‌کننده منابع
@@ -145,14 +145,15 @@ sudo /opt/openvpnpa/manage stop node
 ```
 
 پیکربندی در `/opt/openvpnpa/config`، SQLite و PKI در `/opt/openvpnpa/state`
-و کد نسخه ثابت در `/opt/openvpnpa/releases/v0.2.0-beta.5` است. حذف کانتینر
+و کد نسخه ثابت در `/opt/openvpnpa/releases/v0.2.0-beta.6` است. حذف کانتینر
 این داده‌ها را حذف نمی‌کند. برای backup سازگار، سرویس این پروژه را متوقف
 کنید و config و state را با هم، با حفاظت از کلیدهای خصوصی، آرشیو کنید.
 فایل audit و tombstoneهای مصرف در این beta خودکار پاک نمی‌شوند؛ فضای دیسک
 باید برای حجم کاربران و تعداد sessionها کافی باشد. لاگ کانتینر محدود شده است.
 
 اجرای دوباره نصب‌کننده تنظیمات و PKI موجود را حفظ می‌کند و روی همان نسخه
-می‌ماند. به‌روزرسانی بین نسخه‌ها/مهاجرت خودکار در این beta ارائه نشده است.
+می‌ماند. برای دریافت تغییرات بعدی از [دستور آپدیت](update.fa.md) استفاده کنید؛
+مهاجرت ناسازگار داده به‌صورت خودکار بازگردانی نمی‌شود.
 گواهی سرور و کلاینت یک‌ساله‌اند؛ صدور مجدد پیش از انقضا یک عملیات نگهداری
 جداست و این نسخه آن را خودکار انجام نمی‌دهد. همه پروفایل‌های یک UID هنگام
 حذف دسترسی همان UID بسته می‌شوند؛ ابطال مستقل یک دستگاه هنوز ارائه نشده است.
