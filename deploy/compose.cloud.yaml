@@ -1,0 +1,7 @@
+services:
+  node:
+    build:
+      secrets: [proxy_ca]
+secrets:
+  proxy_ca:
+    file: ${OPENVPNPA_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}

@@ -4,3 +4,5 @@ __pycache__/
 .state/
 reports/
 *.sqlite*
+*.ovpn
+*.key

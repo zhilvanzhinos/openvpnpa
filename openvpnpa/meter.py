@@ -29,6 +29,9 @@ class Meter:
             CREATE TABLE IF NOT EXISTS reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS outbound_pending (
+                id INTEGER PRIMARY KEY CHECK(id=1), up INTEGER NOT NULL, down INTEGER NOT NULL
+            );
         """)
 
     @contextmanager
@@ -74,25 +77,37 @@ class Meter:
                 "up=up+excluded.up, down=down+excluded.down",
                 (uid, up-old_up, down-old_down),
             )
+            self.db.execute('INSERT INTO outbound_pending VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET '
+                'up=up+excluded.up,down=down+excluded.down', (up-old_up,down-old_down))
             self.db.execute(
                 "INSERT INTO sessions VALUES (?,?,?,?,?,?) ON CONFLICT(epoch,session) "
                 "DO UPDATE SET up=excluded.up,down=excluded.down,closed=excluded.closed",
                 (epoch, session, uid, up, down, int(final)),
             )
 
-    def stats(self, *, reset=False):
+    def stats(self, *, reset=False, uid=None):
         """Model the official destructive read; retain an audit copy locally.
 
         A returned report has NOT been acknowledged by the panel. Its local ID
         is absent from the official response schema. Do not auto-replay it.
         """
         with self.transaction():
-            stats = [dict(name=uid, type="user", link=link, value=value)
-                     for uid, up, down in self.db.execute("SELECT uid,up,down FROM pending ORDER BY uid")
+            rows = self.db.execute("SELECT uid,up,down FROM pending WHERE (? IS NULL OR uid=?) ORDER BY uid", (uid,uid))
+            stats = [dict(name=user_id, type="user", link=link, value=value)
+                     for user_id, up, down in rows
                      for link, value in (("uplink", up), ("downlink", down)) if value]
-            if reset:
+            if reset and stats:
                 self.db.execute("INSERT INTO reports(payload) VALUES (?)", (json.dumps(stats),))
-                self.db.execute("DELETE FROM pending")
+                self.db.execute("DELETE FROM pending WHERE (? IS NULL OR uid=?)", (uid,uid))
+            return stats
+
+    def outbound_stats(self, reset=False):
+        with self.transaction():
+            row = self.db.execute('SELECT up,down FROM outbound_pending WHERE id=1').fetchone()
+            stats = [] if row is None else [dict(name='openvpn-egress',type='outbound',link=link,value=value)
+                for link,value in zip(('uplink','downlink'),row) if value]
+            if reset:
+                self.db.execute('DELETE FROM outbound_pending')
             return stats
 
     def audit(self):
