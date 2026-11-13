@@ -8,10 +8,15 @@ import http.client
 import json
 import io
 import os
+import errno
+import pty
 import re
+import select
+import signal
 import shutil
 import ssl
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -347,6 +352,68 @@ class RuntimeTests(unittest.TestCase):
 
 
 class SetupTests(unittest.TestCase):
+    def test_real_questionnaire_terminal_with_piped_stdin_and_hidden_password(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)/'config.json'
+            code = '''
+import os,sys
+from openvpnpa import setup
+from uuid import uuid4
+fd,write=os.pipe()
+os.close(write)
+os.dup2(fd,0)
+os.close(fd)
+def questions(ask,secret):
+    assert ask("PTY question")=="answer"
+    assert secret("PTY password: ")=="hidden-test-password"
+    return dict(public_host="vpn.example.com",panel_url="https://panel.example.com",
+        admin_user="admin",admin_password="local-password-123456",node_api_key=str(uuid4()),inbound_tag="openvpnpa")
+setup.collect=questions
+sys.argv=["setup","--output",sys.argv[1]]
+setup.main()
+print("PTY_SUCCESS",flush=True)
+'''
+            pid,master = pty.fork()
+            if pid==0:
+                try:
+                    os.execv(sys.executable,[sys.executable,'-c',code,str(target)])
+                finally:
+                    os._exit(127)
+            output = b''
+            answered = password_sent = False
+            deadline = time.monotonic()+10
+            try:
+                while time.monotonic()<deadline:
+                    if not select.select([master],[],[],.1)[0]:
+                        continue
+                    try:
+                        block = os.read(master,8192)
+                    except OSError as error:
+                        if error.errno==errno.EIO:
+                            break
+                        raise
+                    if not block:
+                        break
+                    output += block
+                    if not answered and b'PTY question: ' in output:
+                        os.write(master,b'answer\n')
+                        answered = True
+                    if not password_sent and b'PTY password: ' in output:
+                        os.write(master,b'hidden-test-password\n')
+                        password_sent = True
+                    if b'PTY_SUCCESS' in output:
+                        break
+                self.assertIn(b'PTY_SUCCESS',output)
+                self.assertNotIn(b'hidden-test-password',output)
+                self.assertTrue(target.exists())
+                self.assertEqual(target.stat().st_mode & 0o777,0o600)
+            finally:
+                os.close(master)
+                ended,_ = os.waitpid(pid,os.WNOHANG)
+                if not ended:
+                    os.kill(pid,signal.SIGTERM)
+                    os.waitpid(pid,0)
+
     def test_os_release_does_not_change_git_clone_ref(self):
         script = (Path(__file__).resolve().parents[1]/'install.sh').read_text()
         expected = re.search(r'^OPENVPNPA_RELEASE=(\S+)$',script,re.MULTILINE).group(1)

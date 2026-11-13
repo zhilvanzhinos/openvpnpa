@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-OPENVPNPA_RELEASE=v0.2.0-beta.3
+OPENVPNPA_RELEASE=v0.2.0-beta.4
 INSTALL_ROOT=/opt/openvpnpa
 INPUT_CONFIG=
 CHECK_ONLY=0
@@ -115,7 +115,7 @@ root=pathlib.Path(sys.argv[1])
 version=sys.argv[2]
 text='#!/usr/bin/env bash\nset -euo pipefail\nROOT=/opt/openvpnpa\nexec docker compose --project-name openvpnpa --env-file "$ROOT/config/compose.env" -f "$ROOT/releases/'+version+'/deploy/compose.yaml" "$@"\n'
 target=root/'manage'
-known={text,text.replace(version,'v0.2.0-beta.1'),text.replace(version,'v0.2.0-beta.2')}
+known={text,text.replace(version,'v0.2.0-beta.1'),text.replace(version,'v0.2.0-beta.2'),text.replace(version,'v0.2.0-beta.3')}
 if target.exists() and target.read_text() not in known:
     target=root/('manage-'+version)
     if target.exists() and target.read_text()!=text:

@@ -5,11 +5,20 @@ import json
 import os
 import secrets
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
 from .config import load, validate, hostname
 from .panel import Panel, PanelError
+
+
+@contextmanager
+def terminal():
+    # Buffered r+ requires seekability, which terminals do not provide. Keep
+    # independent read/write streams so curl | sudo bash remains interactive.
+    with open('/dev/tty','r') as reader, open('/dev/tty','w',buffering=1) as writer:
+        yield reader,writer
 
 
 def collect(ask, secret):
@@ -132,15 +141,15 @@ def main():
     if args.from_file:
         data = json.loads(Path(args.from_file).read_text())
     else:
-        with open('/dev/tty','r+') as tty:
+        with terminal() as (reader,writer):
             def ask(prompt, default=None):
-                tty.write(prompt+(' ['+str(default)+']' if default is not None else '')+': ')
-                tty.flush()
-                value = tty.readline()
+                writer.write(prompt+(' ['+str(default)+']' if default is not None else '')+': ')
+                writer.flush()
+                value = reader.readline()
                 if not value:
                     raise ValueError('Interactive terminal closed')
                 return value.strip() or default
-            data = collect(ask,lambda prompt:getpass.getpass(prompt,stream=tty))
+            data = collect(ask,lambda prompt:getpass.getpass(prompt,stream=writer))
     data.setdefault('node_api_key',str(uuid4()))
     data.setdefault('lease_seconds',120)
     data.setdefault('vpn_network','10.89.0.0/24')
