@@ -23,12 +23,40 @@ def load(path):
     return validate(json.loads(Path(path).read_text()))
 
 
+def normalize_panel_url(value, *, assume_https=False, allow_http=False):
+    if not isinstance(value,str) or not value.strip():
+        raise ValueError('Adres panel ra vared konid; mesal: https://panel.example.com:8000')
+    value = value.strip()
+    if assume_https and '://' not in value:
+        value = 'https://'+value.removeprefix('//')
+    if any(character.isspace() or ord(character)<32 for character in value):
+        raise ValueError('Adres panel nabayad fasele ya karakter control dashte bashad.')
+    try:
+        url = urlsplit(value)
+        port = url.port
+        valid_host = bool(url.hostname)
+        if valid_host:
+            try:
+                ipaddress.ip_address(url.hostname)
+            except ValueError:
+                hostname(url.hostname)
+    except (ValueError,TypeError):
+        raise ValueError('Host ya port panel motabar nist; mesal: https://panel.example.com:8000') from None
+    if url.scheme not in (('https','http') if allow_http else ('https',)) or not valid_host:
+        raise ValueError('Adres panel bayad HTTPS bashad; HTTP faghat ba entekhab sarihe shoma mojaz ast.')
+    if '@' in url.netloc or url.query or url.fragment:
+        raise ValueError('Username/password, query ya # ra dar adres panel vared nakonid.')
+    if url.netloc.endswith(':') or (port is not None and not 1<=port<=65535):
+        raise ValueError('Port panel bayad beyn 1 ta 65535 bashad.')
+    return url.geturl().rstrip('/')
+
+
 def validate(data):
     hostname(data["public_host"])
-    url = urlsplit(data["panel_url"])
-    if url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment:
-        raise ValueError("panel_url must be an HTTPS URL without embedded credentials")
-    data["panel_url"] = data["panel_url"].rstrip('/')
+    data.setdefault('allow_panel_http',False)
+    if type(data['allow_panel_http']) is not bool:
+        raise ValueError('allow_panel_http must be a boolean')
+    data['panel_url'] = normalize_panel_url(data['panel_url'],allow_http=data['allow_panel_http'])
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", data["inbound_tag"]):
         raise ValueError("invalid inbound_tag")
     if not data.get("admin_user") or ':' in data["admin_user"]:

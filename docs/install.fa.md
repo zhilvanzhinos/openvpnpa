@@ -8,7 +8,7 @@
 ## دستور نصب
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.7/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.8/install.sh | sudo bash
 ```
 
 همین یک دستور دانلود، پرسش‌نامه فینگلیش، نصب Docker در صورت نیاز، ساخت تصویر،
@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta
 فرمان پیش‌بررسی فقط‌خواندنی:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.7/install.sh | bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.8/install.sh | bash -s -- --check
 ```
 
 نصب‌کننده سیستم و TUN را ابتدا بررسی می‌کند؛ اگر TUN نباشد بدون تغییر متوقف
@@ -32,7 +32,13 @@ Docker CE نصب می‌شود؛ برای نصب سفارشی ناشناخته �
 ## اطلاعاتی که نصب‌کننده می‌پرسد
 
 * IP عمومی IPv4 یا نام دامنه نود؛ همین مقدار در پروفایل و گواهی استفاده می‌شود.
-* آدرس HTTPS پاسارگارد، بدون `/api` انتهایی. پیشوند مسیر نصب، اگر دارد، حفظ شود.
+* آدرس پاسارگارد، بدون `/api` انتهایی؛ مثلاً `https://panel.example.com:8000`.
+  IP یا دامنه بدون scheme به HTTPS تبدیل می‌شود. آدرس نامعتبر همان‌جا دوباره
+  پرسیده می‌شود. پیشوند مسیر نصب، اگر دارد، حفظ می‌شود. نام کاربری، رمز،
+  query یا بخش `#` داخل این آدرس نباشد.
+* اگر خود پنل فقط با `http://` در دسترس است، همان آدرس را وارد کنید. نصب‌کننده
+  پیش از گرفتن رمز درباره ارسال بدون TLS توضیح می‌دهد و تأیید صریح می‌خواهد.
+  این حالت فقط برای شبکه مورداعتماد است؛ تبدیل خودکار HTTPS به HTTP انجام نمی‌شود.
 * روش ورود به پاسارگارد: نام کاربری/رمز مدیر یا توکن Bearer API. نصب‌کننده در
   روش اول از `/api/admin/token` توکن می‌گیرد. رمز اصلی ذخیره نمی‌شود؛ فقط توکن
   در فایل خصوصی می‌ماند. در روش دوم توکن با یک درخواست خواندنی بررسی می‌شود.
@@ -59,7 +65,7 @@ Certificate همان CA عمومی موردنیاز فیلد `server_ca` پاس�
 برای نمایش مجدد مشخصات، بدون نصب دوباره:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.7/install.sh | sudo bash -s -- --show-connection
+curl -fsSL https://raw.githubusercontent.com/zhilvanzhinos/openvpnpa/v0.2.0-beta.8/install.sh | sudo bash -s -- --show-connection
 ```
 
 افزودن نود جدید در پاسارگارد با این اطلاعات انجام می‌شود؛ نصب‌کننده منابع
@@ -75,8 +81,9 @@ SSH/SCP دریافت و برای این اتصال به trust مرورگر اض�
 /opt/openvpnpa/state/pki/ca.crt
 ```
 
-کلید `ca.key`، کلید سرور و پروفایل‌های کاربران خصوصی‌اند. اعتبارسنجی گواهی
-در پروفایل و ارتباط API خاموش نمی‌شود. برای رابط loopback می‌توانید از دستگاه
+کلید `ca.key`، کلید سرور و پروفایل‌های کاربران خصوصی‌اند. اعتبارسنجی گواهی در پروفایل و ارتباط HTTPS خاموش نمی‌شود. حالت HTTP
+فقط با انتخاب صریح بالا فعال می‌شود و در فایل تنظیمات با `allow_panel_http=true`
+ثبت می‌شود؛ حالت پیش‌فرض این گزینه false است. برای رابط loopback می‌توانید از دستگاه
 خود این تونل SSH را باز کنید و سپس `https://localhost:8443` را ببینید:
 
 ```sh
@@ -147,7 +154,7 @@ sudo /opt/openvpnpa/manage stop node
 ```
 
 پیکربندی در `/opt/openvpnpa/config`، SQLite و PKI در `/opt/openvpnpa/state`
-و کد نسخه ثابت در `/opt/openvpnpa/releases/v0.2.0-beta.7` است. حذف کانتینر
+و کد نسخه ثابت در `/opt/openvpnpa/releases/v0.2.0-beta.8` است. حذف کانتینر
 این داده‌ها را حذف نمی‌کند. برای backup سازگار، سرویس این پروژه را متوقف
 کنید و config و state را با هم، با حفاظت از کلیدهای خصوصی، آرشیو کنید.
 فایل audit و tombstoneهای مصرف در این beta خودکار پاک نمی‌شوند؛ فضای دیسک

@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from .config import load, validate, hostname
+from .config import load, validate, hostname, normalize_panel_url
 from .panel import Panel, PanelError
 
 
@@ -40,7 +40,19 @@ def collect(ask, secret):
             break
         except (ValueError,TypeError):
             print('Adres motabar vared konid; bedoon https va bedoon port.')
-    panel_url = ask('Adres HTTPS panel PasarGuard, bedoon /api dar entehaye adres')
+    while True:
+        value = ask('Adres panel PasarGuard; mesal https://panel.example.com:8000 (bedoon /api)')
+        allow_http = False
+        if isinstance(value,str) and value.strip().lower().startswith('http://'):
+            print('HTTP ramz va token ra bedoon TLS mifrestad; faghat dar network motmaen estefade konid.')
+            if str(ask('Ba hamin adres HTTP edame bedahim? y/n','n')).lower() not in ('y','yes','bale'):
+                continue
+            allow_http = True
+        try:
+            panel_url = normalize_panel_url(value,assume_https=True,allow_http=allow_http)
+            break
+        except ValueError as error:
+            print(str(error))
     admin_user = ask('Username admin panel OpenVPN','admin')
     while True:
         password = secret('Password panel OpenVPN, hadeaghal 16 karakter: ')
@@ -50,7 +62,7 @@ def collect(ask, secret):
     public_ui = str(ask('Panel OpenVPN az biron server ghabel dastresi bashad? y/n','y')).lower() in ('y','yes','bale')
     tag = ask('Tag ekhtesasi in node','openvpnpa_'+node_key.replace('-','')[:8])
     groups = ask('ID group ekhtesasi dar PasarGuard; agar nadarid Enter bezanid','')
-    data = validate(dict(public_host=host,panel_url=panel_url,admin_user=admin_user,
+    data = validate(dict(public_host=host,panel_url=panel_url,allow_panel_http=allow_http,admin_user=admin_user,
         admin_password=password,public_ui=public_ui,inbound_tag=tag,
         group_ids=[int(value.strip()) for value in groups.split(',') if value.strip()],
         node_api_key=node_key,vpn_port=port('Port UDP etesal OpenVPN',1194),

@@ -26,11 +26,12 @@ from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlencode
+from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
 from openvpnpa import service_pb2 as pb
 from openvpnpa.app import App
-from openvpnpa.config import load
+from openvpnpa.config import load, normalize_panel_url
 from openvpnpa.panel import Panel, PanelError
 from openvpnpa.pki import PKI
 from openvpnpa.server import Handler, NodeHandler, UIHandler, serve
@@ -190,6 +191,50 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(data['panel_token'],'lab-token')
         self.assertFalse(data['public_ui'])
         self.assertEqual(self.api_calls,[('GET','/api/users?limit=1')])
+
+    def test_invalid_panel_url_reprompts_before_password_and_adds_https(self):
+        bare = self.app.config['panel_url'].removeprefix('https://')+'/'
+        answers = iter(['127.0.0.1','not a valid address',bare,'admin','y','openvpnpa_fresh','7',1194,62050,8443,'1','panel-admin'])
+        passwords = iter(['local-password-123456','local-password-123456','main-panel-password'])
+        def client(config):
+            return Panel(dict(config,panel_ca=str(self.pki.root/'ca.crt')))
+        output = io.StringIO()
+        with redirect_stdout(output),patch('openvpnpa.setup.Panel',side_effect=client):
+            data = collect(lambda *_:next(answers),lambda _:next(passwords))
+        self.assertEqual(data['panel_url'],self.app.config['panel_url'])
+        self.assertFalse(data['allow_panel_http'])
+        self.assertEqual(data['panel_token'],'lab-token')
+        self.assertIn('fasele',output.getvalue())
+
+    def test_explicit_http_opt_in_can_log_in_to_plain_http_panel(self):
+        server = ThreadingHTTPServer(('127.0.0.1',0),self.panel_server.RequestHandlerClass)
+        thread = threading.Thread(target=server.serve_forever,daemon=True)
+        thread.start()
+        try:
+            url = 'http://127.0.0.1:'+str(server.server_port)
+            answers = iter(['127.0.0.1',url,'y','admin','y','openvpnpa_fresh','7',1194,62050,8443,'1','panel-admin'])
+            passwords = iter(['local-password-123456','local-password-123456','main-panel-password'])
+            output = io.StringIO()
+            with redirect_stdout(output):
+                data = collect(lambda *_:next(answers),lambda _:next(passwords))
+            self.assertEqual(data['panel_url'],url)
+            self.assertTrue(data['allow_panel_http'])
+            self.assertEqual(data['panel_token'],'lab-token')
+            self.assertIn('bedoon TLS',output.getvalue())
+            self.assertNotIn('main-panel-password',output.getvalue())
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
+    def test_declining_http_returns_to_url_question(self):
+        answers = iter(['127.0.0.1','http://127.0.0.1:8000','n',self.app.config['panel_url'],
+            'admin','y','openvpnpa_fresh','7',1194,62050,8443,'1','panel-admin'])
+        passwords = iter(['local-password-123456','local-password-123456','main-panel-password'])
+        with redirect_stdout(io.StringIO()),patch('openvpnpa.setup.Panel',return_value=self.app.panel):
+            data = collect(lambda *_:next(answers),lambda _:next(passwords))
+        self.assertFalse(data['allow_panel_http'])
+        self.assertEqual(data['panel_url'],self.app.config['panel_url'])
 
     def test_terminal_summary_displays_api_key_and_complete_certificate_only(self):
         path = self.app.root/'config.json'
@@ -352,6 +397,20 @@ class RuntimeTests(unittest.TestCase):
 
 
 class SetupTests(unittest.TestCase):
+    def test_panel_url_normalization_preserves_prefix_and_validates_endpoint(self):
+        self.assertEqual(normalize_panel_url('  panel.example.com:8443/base/  ',assume_https=True),
+            'https://panel.example.com:8443/base')
+        self.assertEqual(normalize_panel_url('203.0.113.10:8000',assume_https=True),
+            'https://203.0.113.10:8000')
+        self.assertEqual(normalize_panel_url('https://[2001:db8::1]:8443/base/'),
+            'https://[2001:db8::1]:8443/base')
+        for url in ('http://panel.example.com','https://user:password@panel.example.com',
+                    'https://panel.example.com?token=private','https://panel.example.com/#/dashboard',
+                    'https://panel.example.com:99999','https://panel.example.com:',
+                    'https://panel.example.com:0','https://panel.example.com\r\nHeader: private'):
+            with self.subTest(url=url),self.assertRaises(ValueError):
+                normalize_panel_url(url)
+
     def test_real_questionnaire_terminal_with_piped_stdin_and_hidden_password(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)/'config.json'
