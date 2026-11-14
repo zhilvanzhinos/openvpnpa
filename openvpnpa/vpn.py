@@ -112,7 +112,7 @@ class VPN:
             f'ca {pki}/ca.crt\ncert {pki}/server.crt\nkey {pki}/server.key\n'
             'dh none\nverify-client-cert require\nremote-cert-tls client\n'
             'tls-version-min 1.2\ndata-ciphers AES-256-GCM:AES-128-GCM\n'
-            f'management {sock} unix\nmanagement-client-auth\nmanagement-hold\n'
+            f'management {sock} unix\nmanagement-client-auth\nauth-user-pass-optional\nmanagement-hold\n'
             'management-log-cache 1\nkeepalive 10 60\nexplicit-exit-notify 1\n'
             'push "redirect-gateway def1"\npush "dhcp-option DNS 1.1.1.1"\n'
             'push "block-ipv6"\npersist-key\npersist-tun\nverb 3\n')

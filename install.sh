@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 export PATH="${PATH:-/usr/bin:/bin}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
-OPENVPNPA_RELEASE=v0.2.0-beta.8
+OPENVPNPA_RELEASE=v0.2.0-beta.9
 INSTALL_ROOT=/opt/openvpnpa
 INPUT_CONFIG=
 CHECK_ONLY=0

@@ -54,7 +54,10 @@ class PKI:
         csr.unlink()
         ext.unlink()
 
-    def profile(self, uid, port):
+    def profile(self, uid, port, host=None):
+        host = self.host if not host else hostname(host)
+        if type(port) is not int or not 1 <= port <= 65535:
+            raise ValueError("invalid profile port")
         uid = str(int(uid))
         if int(uid) < 1:
             raise ValueError("positive UID required")
@@ -64,7 +67,7 @@ class PKI:
                 self.issue(stem, uid, 'clientAuth')
             # Validate expiry: do not hand out an expired cached certificate.
             command('openssl','x509','-checkend','86400','-noout','-in',str(self.root/(stem+'.crt')))
-            return ('client\ndev tun\nproto udp\nremote '+self.host+' '+str(port)+'\n'
+            return ('client\ndev tun\nproto udp\nremote '+host+' '+str(port)+'\n'
                 'nobind\npersist-key\npersist-tun\nremote-cert-tls server\n'
                 'verify-x509-name openvpnpa-server name\n'
                 'data-ciphers AES-256-GCM:AES-128-GCM\nauth-nocache\nverb 3\n'

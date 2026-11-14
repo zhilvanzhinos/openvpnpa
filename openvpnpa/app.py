@@ -31,6 +31,7 @@ class App:
         self.state = State(self.root/'state.sqlite',config['inbound_tag'],config['lease_seconds'])
         config['group_ids'] = self.state.setting('group_ids',config['group_ids'])
         self.panel = Panel(config)
+        self.profile_endpoint = self.state.setting('profile_endpoint', {'host':'', 'port':None})
         self.vpn = VPN(config,self.state,self.root)
         self.boot = time.monotonic()
         self.control = threading.RLock()
@@ -79,6 +80,13 @@ class App:
         if not self.refresh_lock.acquire(blocking=False):
             return
         try:
+            imported = set()
+            try:
+                for user in self.panel.users():
+                    self.state.enroll(user)
+                    imported.add(str(int(user['id'])))
+            except (PanelError, ValueError, KeyError, TypeError):
+                log.warning('Panel user import failed; existing users will be refreshed individually')
             def refresh_user(user):
                 try:
                     fresh = self.panel.get_user(user['id'])
@@ -89,7 +97,8 @@ class App:
                     # Never refresh freshness on failure; authorization expires.
                     log.warning('Panel user refresh failed for UID %s; access cache will expire',user['id'])
             with ThreadPoolExecutor(max_workers=4) as pool:
-                list(pool.map(refresh_user,self.state.users()))
+                list(pool.map(refresh_user,(user for user in self.state.users()
+                    if str(user['id']) not in imported)))
         finally:
             self.refresh_lock.release()
 

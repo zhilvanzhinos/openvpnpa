@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 # Managed by OpenVPNPA updater
-OPENVPNPA_BOOTSTRAP_RELEASE=v0.2.0-beta.8
+OPENVPNPA_BOOTSTRAP_RELEASE=v0.2.0-beta.9
 
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
   echo 'OpenVPNPA update: sudo bash update.sh'

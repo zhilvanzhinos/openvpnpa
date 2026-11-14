@@ -20,8 +20,9 @@ from google.protobuf.message import DecodeError
 
 from . import service_pb2 as pb
 from .panel import PanelError, active
+from .config import hostname
 
-VERSION = '0.2.0'
+VERSION = '0.2.0-beta.9'
 MAX_BODY = 4*1024*1024
 log = logging.getLogger(__name__)
 
@@ -297,7 +298,8 @@ class UIHandler(Handler):
             if not active(user):
                 self.reply(403,b'{"error":"user is not active in PasarGuard"}')
                 return
-            data = app.pki.profile(uid,app.config['vpn_port']).encode()
+            endpoint = app.profile_endpoint
+            data = app.pki.profile(uid,endpoint['port'] or app.config['vpn_port'],endpoint['host']).encode()
             self.reply(200,data,'application/x-openvpn-profile',{'Content-Disposition':f'attachment; filename="openvpn-{uid}.ovpn"'})
             return
         if self.command=='GET' and path=='/setup':
@@ -325,6 +327,17 @@ class UIHandler(Handler):
             app.state.enroll(user)
         elif path=='/refresh':
             app.refresh()
+        elif path=='/settings/profile':
+            host = form.get('host',[''])[0].strip()
+            port_text = form.get('port',[''])[0].strip()
+            if host:
+                hostname(host)
+            port = int(port_text) if port_text else None
+            if port is not None and not 1 <= port <= 65535:
+                raise ValueError('invalid profile port')
+            endpoint = {'host':host, 'port':port}
+            app.state.save_setting('profile_endpoint',endpoint)
+            app.profile_endpoint = endpoint
         elif path=='/settings/groups':
             values = form['group_ids'][0].split(',')
             ids = list(dict.fromkeys(int(value.strip()) for value in values))
@@ -350,6 +363,12 @@ class UIHandler(Handler):
         body = ('<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><title>OpenVPNPA</title><style>'+STYLE+'</style>'
             '<h1>مدیریت OpenVPN</h1><p>اتصال نود به پاسارگارد: '+('برقرار' if bound else 'منتظر اتصال')
             +' · <a href="/setup">تنظیمات اتصال نود</a></p>'
+            '<section><h2>آدرس اتصال کلاینت OpenVPN</h2><form method="post" action="/settings/profile">'+token+
+            '<label>IP یا دامنه تانل <input name="host" dir="ltr" value="'+esc(app.profile_endpoint['host'],quote=True)+'"></label>'
+            '<label>پورت اتصال UDP <input name="port" type="number" min="1" max="65535" value="'
+            +str(app.profile_endpoint['port'] or '')+'"></label><button>ذخیره</button></form>'
+            '<small>مقدار خالی: آدرس اصلی نود و پورت اصلی OpenVPN. فقط remote فایل‌های جدید تغییر می‌کند؛ '
+            'فایل‌های قبلی و ارتباط پاسارگارد تغییر نمی‌کنند. تانل باید UDP را منتقل کند.</small></section>'
             '<section><h2>ساخت کاربر در پاسارگارد</h2><form method="post" action="/users/create">'+token+
             '<input name="username" placeholder="نام کاربری" pattern="[a-z0-9_]{3,32}" required>'
             '<input name="gib" type="number" min="0" max="1000000" step="0.01" value="10" aria-label="حجم گیگابایت">'

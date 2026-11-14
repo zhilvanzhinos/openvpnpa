@@ -25,7 +25,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, parse_qs
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
@@ -73,7 +73,6 @@ class RuntimeTests(unittest.TestCase):
             def handle_route(self):
                 test.api_calls.append((self.command,self.path))
                 if self.command=='POST' and self.path=='/api/admin/token':
-                    from urllib.parse import parse_qs
                     form = parse_qs(self.body().decode())
                     if form=={'username':['panel-admin'],'password':['main-panel-password']}:
                         self.reply(200,b'{"access_token":"lab-token","token_type":"bearer"}')
@@ -85,6 +84,13 @@ class RuntimeTests(unittest.TestCase):
                     return
                 if self.command=='GET' and self.path=='/api/users?limit=1':
                     self.reply(200,b'{"users":[],"total":0}')
+                    return
+                if self.command=='GET' and self.path.startswith('/api/users?'):
+                    query = parse_qs(urlsplit(self.path).query)
+                    offset = int(query['offset'][0])
+                    # Deliberately cap pages below the requested limit.
+                    users = sorted(test.panel_users.values(),key=lambda u:u['username'])
+                    self.reply(200,json.dumps(dict(users=users[offset:offset+2],total=len(users))).encode())
                     return
                 if self.command=='POST' and self.path=='/api/user':
                     data = json.loads(self.body())
@@ -283,6 +289,51 @@ class RuntimeTests(unittest.TestCase):
         data = self.node_request('GET','/stats/',pb.StatRequest(type=pb.UsersStat,reset=True))[2]
         self.assertFalse(pb.StatResponse.FromString(data).stats)
 
+    def test_all_pages_import_idempotently_without_granting_access(self):
+        for uid in range(50,55):
+            self.panel_users[uid] = dict(id=uid,username='user_'+str(uid),status='active',
+                expire=0,data_limit=0,used_traffic=0)
+        self.app.refresh()
+        self.assertEqual([u['id'] for u in self.app.state.users()],list(range(50,55)))
+        self.assertEqual(len([p for m,p in self.api_calls if p.startswith('/api/users?')]),3)
+        self.assertTrue(all(m=='GET' for m,p in self.api_calls))
+        self.assertFalse(self.app.state.authorized('50'))
+        self.start([pb.User(email='50',inbounds=['openvpnpa']),pb.User(email='51',inbounds=['v2ray'])])
+        self.assertTrue(self.app.state.authorized('50'))
+        self.assertFalse(self.app.state.authorized('51'))
+        self.panel_users[50]['username']='renamed'
+        self.app.refresh()
+        self.assertEqual(len(self.app.state.users()),5)
+        self.assertEqual(self.app.state.users()[0]['username'],'renamed')
+        self.app.state.stop()
+        self.assertFalse(self.app.state.authorized('50'))
+
+    def test_profile_endpoint_is_independent_persistent_and_only_affects_new_downloads(self):
+        self.create()
+        original = self.request(self.ui,'GET','/profiles/42.ovpn',headers=self.admin())[2]
+        self.assertIn(b'remote 127.0.0.1 1194\n',original)
+        original_config = dict(self.app.config)
+        def save(host,port):
+            return self.request(self.ui,'POST','/settings/profile',
+                urlencode(dict(csrf=self.app.csrf,host=host,port=port)).encode(),self.admin())[0]
+        self.assertEqual(save('tunnel.example.com','2345'),303)
+        profile = self.request(self.ui,'GET','/profiles/42.ovpn',headers=self.admin())[2]
+        self.assertEqual(profile,original.replace(b'remote 127.0.0.1 1194\n',b'remote tunnel.example.com 2345\n'))
+        self.assertEqual(self.app.config,original_config)
+        self.assertEqual(self.app.pki.host,'127.0.0.1')
+        reopened = App(dict(self.base),self.case_tmp.name)
+        try:
+            self.assertEqual(reopened.profile_endpoint,dict(host='tunnel.example.com',port=2345))
+            self.assertFalse(reopened.state.started)
+        finally:
+            reopened.state.close()
+        for host,port in [('host\nscript-security 2','1234'),('https://bad.example','1234'),('ok.example','65536')]:
+            self.assertEqual(save(host,port),400)
+        self.assertEqual(save('',''),303)
+        self.assertEqual(self.request(self.ui,'GET','/profiles/42.ovpn',headers=self.admin())[2],original)
+        self.assertEqual(save('203.0.113.4',''),303)
+        self.assertIn(b'remote 203.0.113.4 1194\n',self.request(self.ui,'GET','/profiles/42.ovpn',headers=self.admin())[2])
+
     def test_revocation_and_shared_panel_quota_kill_existing_client(self):
         user = self.create()
         self.start([pb.User(email='42',inbounds=['openvpnpa'])])
@@ -393,6 +444,9 @@ class RuntimeTests(unittest.TestCase):
             else:
                 self.assertTrue(vpn.ready.is_set())
         finally:
+            conf = (self.app.root/'run/server.conf').read_text()
+            self.assertIn('management-client-auth\nauth-user-pass-optional\n',conf)
+            self.assertIn('verify-client-cert require\n',conf)
             vpn.stop()
 
 

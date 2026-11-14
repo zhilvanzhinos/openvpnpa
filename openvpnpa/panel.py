@@ -55,6 +55,41 @@ class Panel:
         except (URLError, ValueError, TimeoutError):
             raise PanelError("PasarGuard API unavailable or returned invalid JSON") from None
 
+    def users(self, page_size=100):
+        """Read every API page, without creating users or changing groups.
+
+        PasarGuard 5.5.1 supports offset/limit and username sorting. Advance
+        by the actual page length because servers may cap the requested limit.
+        Reject non-progressing/malformed pages rather than loop forever.
+        """
+        offset, seen = 0, set()
+        while True:
+            page = self.request("GET", "/api/users?"+urlencode(
+                dict(offset=offset, limit=page_size, sort="username")))
+            if not isinstance(page, dict) or not isinstance(page.get('users'), list):
+                raise PanelError("Invalid users page")
+            total = page.get('total')
+            if type(total) is not int or total < 0:
+                raise PanelError("Invalid users total")
+            users = page['users']
+            if not users:
+                if offset < total:
+                    raise PanelError("Incomplete users page")
+                return
+            try:
+                ids = {int(user['id']) for user in users}
+                if any(uid < 1 for uid in ids):
+                    raise ValueError()
+            except (KeyError, TypeError, ValueError):
+                raise PanelError("Invalid users page UID") from None
+            if not ids-seen:
+                raise PanelError("Users pagination made no progress")
+            seen.update(ids)
+            yield from users
+            offset += len(users)
+            if offset >= total:
+                return
+
     def get_user(self, uid):
         return self.request("GET", "/api/user/by-id/"+str(int(uid)))
 
